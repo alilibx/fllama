@@ -58,6 +58,30 @@ if(WIN32)
   message(STATUS "Windows detected, enabling LLAMA_VULKAN")
 endif()
 
+# iOS: force Metal OFF.
+#
+# ggml defaults GGML_METAL to ON for all Apple platforms, and with
+# GGML_METAL_EMBED_LIBRARY it embeds ~595 KB of Metal *source* which ggml then
+# compiles on-device on first inference. On a real iPhone that takes minutes
+# (a 1B Q4 summary never completed in >3 min on an iPhone 17) and nothing
+# caches the result, so every cold launch pays it again. CPU inference is far
+# faster in practice.
+#
+# This is FORCEd here rather than left to the -D flags from hook/build.dart:
+# passing -DGGML_METAL=OFF alone did NOT stick (the configured CMakeCache still
+# showed GGML_METAL:BOOL=ON for an iPhoneOS build), so the option is pinned at
+# the point where ggml can no longer default it back on. The hook still passes
+# the define too; this is the belt to that braces.
+#
+# To re-enable the GPU on iOS, precompile the shaders at build time
+# (xcrun -sdk iphoneos metal + metallib), ship the .metallib as a bundle
+# resource, and set GGML_METAL ON with GGML_METAL_EMBED_LIBRARY OFF.
+if(IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(GGML_METAL OFF CACHE BOOL "Disable Metal on iOS: on-device shader compilation stalls" FORCE)
+  set(GGML_METAL_EMBED_LIBRARY OFF CACHE BOOL "No embedded Metal source on iOS" FORCE)
+  message(STATUS "iOS detected, forcing GGML_METAL=OFF (CPU inference)")
+endif()
+
 if(APPLE)
   # Metal GPU acceleration — previously set by podspec/shell scripts.
   # Now handled here so the CMake build is self-contained.
