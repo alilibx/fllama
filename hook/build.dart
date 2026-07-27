@@ -316,20 +316,39 @@ Map<String, String> _computeDefines(OS targetOS) {
     'LLAMA_BUILD_COMMIT': 'unknown',
   };
 
-  // Apple (macOS + iOS): Metal GPU, no OpenMP.
+  // Apple (macOS + iOS): no OpenMP.
   if (targetOS == OS.macOS || targetOS == OS.iOS) {
-    defines['GGML_METAL'] = 'ON';
-    // Embed the Metal shader library into the binary so we don't need
-    // to ship a separate .metallib file.
-    defines['GGML_METAL_EMBED_LIBRARY'] = 'ON';
     // Homebrew's libomp is arm64-only; linking fails on x86_64 / universal
     // builds. llama.cpp uses pthreads as a fallback, which is fine.
     defines['GGML_OPENMP'] = 'OFF';
   }
   if (targetOS == OS.macOS) {
+    defines['GGML_METAL'] = 'ON';
+    // Embed the Metal shader library into the binary so we don't need
+    // to ship a separate .metallib file.
+    defines['GGML_METAL_EMBED_LIBRARY'] = 'ON';
     defines['CMAKE_OSX_DEPLOYMENT_TARGET'] = '10.15';
   }
   if (targetOS == OS.iOS) {
+    // Metal is deliberately OFF on iOS.
+    //
+    // GGML_METAL_EMBED_LIBRARY embeds ggml's Metal *source* (~595 KB of
+    // .metal text, not compiled GPU code) into the binary, and ggml compiles
+    // it on-device via newLibraryWithSource on first inference. On a real
+    // iPhone that takes minutes: a 1B Q4 summary never completed in over
+    // three minutes on an iPhone 17 (A19), while STT on the same device ran
+    // at ~0.03 real-time factor. Nothing caches the result, so every cold
+    // launch pays it again. CPU inference is far faster in practice.
+    //
+    // Verified: no .metallib exists anywhere in the built .app or in
+    // fllama.framework, and the framework binary contains the raw shader
+    // source — so runtime compilation was the only code path available.
+    //
+    // To re-enable the GPU here, precompile the shaders at build time
+    // (`xcrun -sdk iphoneos metal` + `metallib`) and ship the .metallib as a
+    // bundle resource rather than embedding source. Then set GGML_METAL=ON
+    // and GGML_METAL_EMBED_LIBRARY=OFF.
+    defines['GGML_METAL'] = 'OFF';
     defines['CMAKE_OSX_DEPLOYMENT_TARGET'] = '13.0';
   }
 
