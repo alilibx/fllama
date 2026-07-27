@@ -82,7 +82,11 @@ if(IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
   message(STATUS "iOS detected, forcing GGML_METAL=OFF (CPU inference)")
 endif()
 
-if(APPLE)
+# macOS only, NOT iOS. This block used to be plain `if(APPLE)`, which is true
+# for iOS too, and its FORCE overrode both the iOS block above and the
+# -DGGML_METAL=OFF passed by hook/build.dart — so Metal could not be turned
+# off on iOS by any means until this condition was narrowed.
+if(APPLE AND NOT IOS)
   # Metal GPU acceleration — previously set by podspec/shell scripts.
   # Now handled here so the CMake build is self-contained.
   set(GGML_METAL ON CACHE BOOL "Enable Metal" FORCE)
